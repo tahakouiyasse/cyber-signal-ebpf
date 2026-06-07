@@ -4,7 +4,7 @@
 [![eBPF](https://img.shields.io/badge/eBPF-CO--RE%20%2F%20BTF%20v1.0-blueviolet?logo=linux&logoColor=white)](https://ebpf.io/)
 [![Linux](https://img.shields.io/badge/Linux-5.15%2B-blue?logo=linux&logoColor=white)](https://kernel.org/)
 [![XDP](https://img.shields.io/badge/XDP-wire--speed%20ingress-green)](https://www.kernel.org/doc/html/latest/networking/af_xdp.html)
-[![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
+[![License: GPL-2.0](https://img.shields.io/badge/license-GPL--2.0-red)](https://github.com/tahakouiyasse/cyber-signal-ebpf#)
 [![Build](https://img.shields.io/badge/build-bpfel--unknown--none-informational)](https://doc.rust-lang.org/rustc/platform-support.html)
 
 > **Wire-speed, per-CPU network signal extraction at XDP ingress.**  
