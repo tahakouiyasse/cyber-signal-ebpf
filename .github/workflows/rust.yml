@@ -45,7 +45,8 @@ jobs:
     # PHASE 1: ABI FREEZE — sg-common (CONTROLLER.md §6)
     # =========================================================================
     - name: Phase 1.1 - Verify sg-common Core (Kernel Target)
-      run: cargo check --target bpfel-unknown-none -p sg-common
+      # Ajout de -Z build-std=core pour compiler la crate core à la volée
+      run: cargo check -Z build-std=core --target bpfel-unknown-none -p sg-common
 
     - name: Phase 1.2 - Verify sg-common Userspace Bindings
       run: cargo check --target x86_64-unknown-linux-gnu -p sg-common
@@ -61,7 +62,8 @@ jobs:
         LLVM_EXTRACT=$(rustc --print sysroot)/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-objdump
         if [ -f "$LLVM_EXTRACT" ]; then
           echo "=== Auditing eBPF Stack Usage ==="
-          cargo build --release --target bpfel-unknown-none -p sg-ebpf
+          # Ajout également ici pour la compilation en mode release pour l'audit
+          cargo build --release -Z build-std=core --target bpfel-unknown-none -p sg-ebpf
           TARGET_BIN=$(find target/bpfel-unknown-none/release/ -name "sg-ebpf" -type f | head -n 1)
           if [ ! -z "$TARGET_BIN" ]; then
             $LLVM_EXTRACT -d "$TARGET_BIN" | grep -A2 "xdp_ingress" || true
