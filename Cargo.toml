@@ -1,0 +1,112 @@
+# Root workspace — CYBER-SIGNAL-eBPF monorepo
+# Agent 0 controlled. Do not add members without spec delta (CONTROLLER.md §9).
+#
+# sg-ebpf is compiled for bpfel-unknown-none and is excluded from the default
+# workspace build (cargo build at root targets x86_64 only). It is built
+# explicitly via: cargo build -p sg-ebpf --target bpfel-unknown-none
+# The Phase 2 gate command (CONTROLLER.md §6) is authoritative for this.
+[workspace]
+resolver = "2"
+members = [
+    "sg-common",
+    "sg-ebpf",
+    "sg-capture",
+]
+# sg-ebpf must be excluded from default `cargo build` / `cargo test` at the
+# workspace root because bpfel-unknown-none has no std, no test harness, and
+# no proc-macro support. Building it requires --target bpfel-unknown-none.
+# Leaving it in `members` (not `exclude`) keeps it visible to cargo metadata,
+# rust-analyzer, and bpftool skeleton generation — it is just not a default
+# build target.
+default-members = [
+    "sg-common",
+    "sg-capture",
+]
+
+# ---------------------------------------------------------------------------
+# Workspace-level dependency pins (CONTROLLER.md §11)
+# All crates inherit these versions via { workspace = true }.
+# Pinning at the workspace level prevents version drift between crates that
+# share the same transitive dependency (e.g., sg-capture and sg-ebpf both
+# pulling aya types that must agree on SignalFrame layout).
+# ---------------------------------------------------------------------------
+[workspace.dependencies]
+# ABI contract — shared by both kernel and userspace crates.
+sg-common = { path = "sg-common" }
+
+# eBPF kernel-side runtime (sg-ebpf only).
+# Pinned to validated commit SHA per INV-07 + spec delta 2026-05-15.
+# SHA sourced from: git ls-remote https://github.com/aya-rs/aya refs/heads/main
+# To update: new spec delta required per CONTROLLER.md §9. Do not change
+# rev without Agent 0 approval — aya API surface is not stable and a SHA
+# bump can silently alter btf_map, RingBuf, or PerCpuArray call signatures.
+aya-ebpf     = { git = "https://github.com/aya-rs/aya", rev = "5dd4bd440bdf0e29a695cad088fdb1716229633b" }
+aya-log-ebpf = { git = "https://github.com/aya-rs/aya", rev = "5dd4bd440bdf0e29a695cad088fdb1716229633b" }
+
+# Userspace loader and map accessor (sg-capture only).
+aya           = { version = "0.13" }
+aya-log       = { version = "0.2" }
+
+# Async runtime — rt-multi-thread for NCPU worker threads (sg-capture only).
+# sync: required for tokio::sync::Notify used in hot-reload signalling.
+# macros: #[tokio::main] in sg-capture/src/main.rs.
+# io-util: NOT included — vacuum loop uses raw ring buffer polling, not AsyncRead.
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+
+# CPU affinity pinning — must be set before any ring buffer access per §5.3.
+core_affinity = { version = "0.8" }
+
+# Compile-time layout assertions — used by sg-common and propagated to dependents.
+# default-features = false: the crate has no features, but explicit opt-out
+# documents that we are not relying on any optional std integration.
+static_assertions = { version = "1.1", default-features = false }
+
+# ---------------------------------------------------------------------------
+# Release profile — applied workspace-wide.
+# opt-level = 3    : mandatory for 100 Mpps vacuum throughput target.
+# lto = "fat"      : cross-crate dead-code elimination; removes cold-path
+#                    functions from the hot binary. "fat" preferred over "thin"
+#                    because sg-capture is a single long-running binary and
+#                    link time is not a cycle concern.
+# codegen-units = 1: disables parallel codegen partitioning; required for LTO
+#                    to see the full call graph and inline across crate bounds.
+# panic = "abort"  : no unwinding runtime. Userspace panics are fatal by design
+#                    (a panicking vacuum worker cannot safely drain the ring).
+#                    The eBPF object inherits this via its own Cargo.toml.
+# strip = "symbols": removes debug symbols from the release binary; reduces
+#                    mmap footprint of the vacuum process.
+# ---------------------------------------------------------------------------
+[profile.release]
+opt-level      = 3
+lto            = "fat"
+codegen-units  = 1
+panic          = "abort"
+strip          = "symbols"
+
+# Dev profile: keep debug symbols, disable LTO for fast iteration.
+# panic = "abort" is retained even in dev — a panicking vacuum worker during
+# development produces a core dump that is more useful than an unwound stack.
+# This also keeps dev and release semantically identical for panic behavior.
+[profile.dev]
+opt-level = 0
+debug     = true
+panic     = "abort"
+
+# ---------------------------------------------------------------------------
+# Workspace lints — enforced across all crates (-D warnings per CONTROLLER.md §7).
+# ---------------------------------------------------------------------------
+[workspace.lints.rust]
+unsafe_code          = "warn"   # warn, not deny: eBPF and mmap require unsafe.
+                                # Each unsafe block must carry a SAFETY comment.
+unused_imports       = "deny"
+dead_code            = "warn"   # warn: eBPF map statics appear "dead" to rustc.
+missing_docs         = "warn"
+
+[workspace.lints.clippy]
+# Heap allocation guards — clippy catches common patterns that rustc does not.
+# These are warn, not deny, because some may fire in macro-generated code
+# outside our control (aya proc-macros). Each suppression requires a comment.
+vec_init_then_push   = "warn"   # Vec::new() + push = should be array literal
+unnecessary_to_owned = "warn"   # .to_owned() / .to_string() on &'static str
+box_default          = "warn"   # Box::new(T::default()) = heap allocation
+large_stack_arrays   = "warn"   # arrays > 512B on stack — verifier budget INV-05

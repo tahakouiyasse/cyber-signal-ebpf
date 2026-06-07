@@ -1,0 +1,25 @@
+[package]
+name        = "sg-capture"
+version     = "0.1.0"
+edition     = "2021"
+description = "CYBER-SIGNAL userspace vacuum engine — Phase 3"
+
+# CONTROLLER.md §11: pinned dependency manifest — do not alter versions.
+[dependencies]
+aya            = "0.13"
+aya-log        = "0.2"
+tokio          = { version = "1", features = ["rt-multi-thread", "macros", "sync", "signal"] }
+core_affinity  = "0.8"
+sg-common      = { path = "../sg-common" }
+anyhow         = "1"          # §Mandate: comprehensive error context on loader path
+env_logger     = "0.11"       # §3 Observability: userspace structured logging
+log            = "0.4"        # facade shared between env_logger and aya-log
+crossbeam-channel = "0.5"     # §3: high-speed bounded channel for dispatch bridge
+arrayvec       = "0.7"        # INV-01: stack-allocated batch buffer; no Vec on hot path
+
+[profile.release]
+opt-level     = 3
+lto           = "fat"         # whole-program link-time optimisation
+codegen-units = 1             # single codegen unit → better inlining across modules
+panic         = "abort"       # removes unwinding machinery; reduces binary size
+strip         = "symbols"

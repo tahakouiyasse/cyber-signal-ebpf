@@ -1,0 +1,23 @@
+[toolchain]
+# FROZEN — nightly-2026-05-10 — do not upgrade without Agent 0 spec delta (CONTROLLER.md §9).
+# Upgrading nightly can silently change codegen for bpfel-unknown-none, alter
+# eBPF verifier instruction counts, or break const-eval on static_assertions.
+# "It compiles on newer nightly" is not a justification for changing this pin.
+channel = "nightly-2026-05-10"
+
+# bpfel-unknown-none  : eBPF little-endian kernel object (sg-ebpf)
+# x86_64-unknown-linux-gnu : userspace vacuum (sg-capture) and ABI crate (sg-common)
+targets = [
+    "bpfel-unknown-none",
+    "x86_64-unknown-linux-gnu",
+]
+
+# rust-src: required by aya-bpf's build.rs to locate core for bpfel cross-compilation.
+# llvm-tools-preview: required by bpftool and cargo-bpf for BTF generation and
+#                     llvm-objdump stack-frame audits (CONTROLLER.md §6, Phase 2 gate).
+components = [
+    "rust-src",
+    "rustfmt",
+    "clippy",
+    "llvm-tools-preview",
+]
