@@ -27,7 +27,7 @@ jobs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: nightly-2026-05-10
-        targets: bpfel-unknown-none, x86_64-unknown-linux-gnu
+        targets: x86_64-unknown-linux-gnu
         components: rust-src, rustfmt, clippy, llvm-tools-preview
 
     - name: Cache Cargo Dependencies
@@ -54,7 +54,7 @@ jobs:
     # PHASE 2: KERNEL VERIFIER PASS — sg-ebpf (CONTROLLER.md §6)
     # =========================================================================
     - name: Phase 2.1 - Compile Kernel eBPF Bytecode
-      run: cargo build --target bpfel-unknown-none -p sg-ebpf
+      run: cargo build -Z build-std=core --target bpfel-unknown-none -p sg-ebpf
 
     - name: Phase 2.2 - Audit Stack Frame Size (INV-05 Compliance)
       run: |
