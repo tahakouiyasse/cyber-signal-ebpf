@@ -113,7 +113,8 @@ jobs:
       run: cargo check --target x86_64-unknown-linux-gnu -p sg-capture
 
     - name: Phase 3.2 - Run Test Suite (Post-Init Assertions)
-      run: cargo test --manifest-path sg-capture/Cargo.toml --target x86_64-unknown-linux-gnu -- --nocapture
+      working-directory: ./sg-capture
+      run: cargo test --target x86_64-unknown-linux-gnu -- --nocapture
 
     - name: Enforce Strict Code Formatting (rustfmt)
       run: cargo fmt --all -- --check
