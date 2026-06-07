@@ -32,19 +32,12 @@ jobs:
 
    
     
+    # Installation robuste via le script officiel d'Aya
     - name: Install bpf-linker
       run: |
-        # Extraction de l'URL exacte de l'asset via l'API GitHub Releases
-        DOWNLOAD_URL=$(curl -s https://api.github.com/repos/aya-rs/bpf-linker/releases/latest | jq -r '.assets[] | select(.name | contains("x86_64-unknown-linux-gnu.tar.gz")) | .browser_download_url')
-        echo "Downloading bpf-linker from: $DOWNLOAD_URL"
-        
-        # Téléchargement et extraction
-        wget -O bpf-linker.tar.gz "$DOWNLOAD_URL"
-        tar -xzf bpf-linker.tar.gz
-        
-        # Déplacement du binaire extrait dans le PATH
-        sudo mv bpf-linker /usr/local/bin/
-        chmod +x /usr/local/bin/bpf-linker
+        echo "=== Installing bpf-linker ==="
+        # Utilisation du script d'installation rapide officiel d'Aya
+        curl -L https://aya-rs.dev/bpf-linker-installer.sh | sh -s -- --to /usr/local/bin
         
         # Vérification opérationnelle
         bpf-linker --version
