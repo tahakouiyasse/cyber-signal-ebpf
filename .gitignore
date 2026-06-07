@@ -1,18 +1,4 @@
-# --- CARGO & RUST ---
-/target
-Cargo.lock
-**/*.rs.bk
-*.pdb
-
-# --- GHOST-HUNTER SPECIFIC ---
-/target/bpf/
-
-# --- IDE & OS ---
-# JetBrains / RustRover
-.idea/
-.vscode/
-.DS_Store
-Thumbs.db
-
-# --- MUTATION TESTING ---
-**/mutants.out*/
+# vmlinux.rs is generated at build time by sg-ebpf/build.rs via aya-tool.
+# It is kernel-specific. Committing it would break CO-RE on different kernels.
+sg-ebpf/target/
+target/

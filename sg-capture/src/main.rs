@@ -1,15 +1,15 @@
 //! `sg-capture` — CYBER-SIGNAL userspace vacuum engine.
 //!
 //! # Architecture: The Distributor Pattern
-//! The eBPF kernel space operates via a single global `BPF_MAP_TYPE_RINGBUF` to 
+//! The eBPF kernel space operates via a single global `BPF_MAP_TYPE_RINGBUF` to
 //! ensure strict chronological ordering and avoid array-of-maps complexity.
 //! To achieve NCPU horizontal scaling in userspace without FD-cloning violations:
-//! 
-//! 1. **The Distributor Thread:** A singular, high-priority thread owns the unique 
-//!    RingBuf handle. It drains the kernel buffer at line-rate and demultiplexes 
+//!
+//! 1. **The Distributor Thread:** A singular, high-priority thread owns the unique
+//!    RingBuf handle. It drains the kernel buffer at line-rate and demultiplexes
 //!    the `SignalFrame`s into lock-free RAM channels based on `frame.cpu_id`.
-//! 2. **The Worker Pool:** N independent threads consume from these bounded RAM 
-//!    channels, executing the heavy entropy/quantum algorithms in parallel 
+//! 2. **The Worker Pool:** N independent threads consume from these bounded RAM
+//!    channels, executing the heavy entropy/quantum algorithms in parallel
 //!    without causing back-pressure on the kernel's XDP hook.
 
 use std::env;
@@ -20,8 +20,8 @@ use std::sync::{
 use std::time::Duration;
 
 use anyhow::{ensure, Context, Result};
-use log::{info, error, debug};
-use sg_common::{NCPU, SignalFrame};
+use log::{debug, error, info};
+use sg_common::{SignalFrame, NCPU};
 use tokio::signal::unix::{signal, SignalKind};
 
 mod dispatch;
@@ -29,7 +29,7 @@ mod loader;
 mod metrics;
 mod vacuum;
 
-use dispatch::{inbound_channel, dispatch_channel};
+use dispatch::{dispatch_channel, inbound_channel};
 use loader::{detach, load_and_attach};
 use metrics::{spawn_reporter, Metrics};
 use vacuum::{spawn_vacuum_worker, VacuumWorkerConfig};
@@ -65,7 +65,7 @@ async fn main() -> Result<()> {
         .context("Architectural Violation: Global SIGNAL_RING handle is missing from Slot 0")?;
 
     // Shared state
-    let metrics  = Arc::new(Metrics::new());
+    let metrics = Arc::new(Metrics::new());
     let shutdown = Arc::new(AtomicBool::new(false));
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
@@ -84,12 +84,12 @@ async fn main() -> Result<()> {
 
         let handle = spawn_vacuum_worker(VacuumWorkerConfig {
             cpu_id,
-            tx: worker_tx,  // Outbound path targeting the arena consumer shards
-            rx: worker_rx,  // Inbound path fed exclusively by the distributor thread
+            tx: worker_tx, // Outbound path targeting the arena consumer shards
+            rx: worker_rx, // Inbound path fed exclusively by the distributor thread
             metrics: Arc::clone(&metrics),
             shutdown: Arc::clone(&shutdown),
         });
-        
+
         join_handles.push(handle);
         debug!("Pipeline shard {cpu_id} isolated and ready");
     }
@@ -97,13 +97,13 @@ async fn main() -> Result<()> {
     // 6. Spawn the High-Speed Kernel Distributor
     // This thread acts as the bridge between Kernel space and the multi-core Userspace.
     let dist_shutdown = Arc::clone(&shutdown);
-    let dist_metrics  = Arc::clone(&metrics);
-    
+    let dist_metrics = Arc::clone(&metrics);
+
     let distributor_handle = std::thread::Builder::new()
         .name("sg-distributor".to_string())
         .spawn(move || -> Result<()> {
             info!("Distributor thread live — intercepting XDP frames");
-            
+
             // Local backoff counter to prevent L1 cache thrashing during dead network periods
             let mut idle_spins = 0;
 
@@ -119,10 +119,10 @@ async fn main() -> Result<()> {
                             let frame: SignalFrame = unsafe {
                                 core::ptr::read_unaligned(raw.as_ptr() as *const SignalFrame)
                             };
-                            
+
                             // Deterministic routing via modulo to distribute load across workers
                             let target_worker = (frame.cpu_id as usize) % worker_count;
-                            
+
                             if let Some(target_tx) = worker_tx_channels.get(target_worker) {
                                 // Non-blocking try_send to guarantee zero backpressure on the kernel hook
                                 if target_tx.try_send(frame).is_err() {
@@ -159,7 +159,7 @@ async fn main() -> Result<()> {
     spawn_reporter(Arc::clone(&metrics), shutdown_rx);
 
     // 8. Graceful Shutdown orchestration via Tokio
-    let mut sigint  = signal(SignalKind::interrupt()).context("SIGINT hook failed")?;
+    let mut sigint = signal(SignalKind::interrupt()).context("SIGINT hook failed")?;
     let mut sigterm = signal(SignalKind::terminate()).context("SIGTERM hook failed")?;
 
     tokio::select! {
@@ -185,7 +185,9 @@ async fn main() -> Result<()> {
     info!("All thread shards joined cleanly");
 
     // Detach eBPF to restore standard NIC behavior
-    detach(probe).context(format!("CRITICAL: XDP detach on `{iface}` failed. Run `ip link set {iface} xdp off` manually."))?;
+    detach(probe).context(format!(
+        "CRITICAL: XDP detach on `{iface}` failed. Run `ip link set {iface} xdp off` manually."
+    ))?;
 
     info!("sg-capture offline. Connection closed.");
     Ok(())

@@ -1,0 +1,27 @@
+[target.bpfel-unknown-none]
+rustflags = [
+    "-C", "opt-level=3",
+    "-C", "lto=fat",
+    "-C", "codegen-units=1",
+    "-C", "panic=abort",
+    "-C", "debug-assertions=no",
+    "-C", "debuginfo=0",
+    "-C", "target-feature=+alu32",
+    "-Z", "trap-unreachable=no",
+    "-Z", "location-detail=none",
+    "-Z", "fmt-debug=none",
+]
+
+[target.bpfeb-unknown-none]
+rustflags = [
+    "-C", "opt-level=3",
+    "-C", "lto=fat",
+    "-C", "codegen-units=1",
+    "-C", "panic=abort",
+    "-C", "debug-assertions=no",
+    "-C", "debuginfo=0",
+    "-C", "target-feature=+alu32",
+    "-Z", "trap-unreachable=no",
+    "-Z", "location-detail=none",
+    "-Z", "fmt-debug=none",
+]

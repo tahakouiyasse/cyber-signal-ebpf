@@ -25,17 +25,17 @@ mod vmlinux;
 // ---------------------------------------------------------------------------
 // Verify ABI alignment at compile time
 const _: () = {
-    assert!(core::mem::size_of::<SignalFrame>()  == 64);
+    assert!(core::mem::size_of::<SignalFrame>() == 64);
     assert!(core::mem::align_of::<SignalFrame>() == 64);
-    assert!(core::mem::offset_of!(SignalFrame, flow_hash)    ==  0);
-    assert!(core::mem::offset_of!(SignalFrame, timestamp_ns) ==  8);
-    assert!(core::mem::offset_of!(SignalFrame, l3_hdr)       == 16);
-    assert!(core::mem::offset_of!(SignalFrame, l4_flags)     == 36);
-    assert!(core::mem::offset_of!(SignalFrame, pps_delta)    == 40);
-    
+    assert!(core::mem::offset_of!(SignalFrame, flow_hash) == 0);
+    assert!(core::mem::offset_of!(SignalFrame, timestamp_ns) == 8);
+    assert!(core::mem::offset_of!(SignalFrame, l3_hdr) == 16);
+    assert!(core::mem::offset_of!(SignalFrame, l4_flags) == 36);
+    assert!(core::mem::offset_of!(SignalFrame, pps_delta) == 40);
+
     // UPDATED: Phase 2.3 layout check
-    assert!(core::mem::offset_of!(SignalFrame, cpu_id)       == 44);
-    assert!(core::mem::offset_of!(SignalFrame, _pad)         == 48);
+    assert!(core::mem::offset_of!(SignalFrame, cpu_id) == 44);
+    assert!(core::mem::offset_of!(SignalFrame, _pad) == 48);
 };
 
 // ---------------------------------------------------------------------------
@@ -57,14 +57,14 @@ pub fn xdp_ingress(ctx: XdpContext) -> u32 {
     // hot footprint. No map lookup, no counter, no log — absolute silence.
     let view = match proto_view::inspect(&ctx) {
         Some(v) => v,
-        None    => return pass_cold(),
+        None => return pass_cold(),
     };
 
     // STEP 3 — Deny list lookup + PPS rate limit.
     // Denied or rate-limited flows exit here with identical zero side effects.
     let result = match filter::select(&view) {
         Some(r) => r,
-        None    => return pass_cold(),
+        None => return pass_cold(),
     };
 
     // STEP 4 — Build SignalFrame on stack (64 bytes; within INV-05 512B limit).
@@ -91,37 +91,33 @@ pub fn xdp_ingress(ctx: XdpContext) -> u32 {
     //   This enables userspace routing while maintaining a single RingBuffer[cite: 25, 27].
     //
     // WHY direct assignment for l3_hdr:
-    //   Assigning [u8; 20] from one stack-local struct to another allows LLVM to 
-    //   unroll the copy into individual store instructions, avoiding a `memcpy` 
+    //   Assigning [u8; 20] from one stack-local struct to another allows LLVM to
+    //   unroll the copy into individual store instructions, avoiding a `memcpy`
     //   call that would trigger a verifier rejection[cite: 100, 101].
-    
-    frame.flow_hash    = result.flow_hash;
+
+    frame.flow_hash = result.flow_hash;
 
     // SAFETY: bpf_ktime_get_ns() — BPF helper #5. No args, cannot fail.
     // Returns CLOCK_MONOTONIC nanoseconds.
     frame.timestamp_ns = unsafe { aya_ebpf::helpers::bpf_ktime_get_ns() };
 
     // WHY we use ptr::copy_nonoverlapping:
-    //   Direct array assignment `frame.l3_hdr = view.l3_hdr` can trigger 
+    //   Direct array assignment `frame.l3_hdr = view.l3_hdr` can trigger
     //   implicit bounds checks or memmove calls in some LLVM versions.
     //   Using a raw pointer copy forces a direct store sequence, ensuring
     //   no panic symbols (E0283/E0080) are emitted in the final object.
     unsafe {
-        core::ptr::copy_nonoverlapping(
-            view.l3_hdr.as_ptr(),
-            frame.l3_hdr.as_mut_ptr(),
-            20,
-        );
+        core::ptr::copy_nonoverlapping(view.l3_hdr.as_ptr(), frame.l3_hdr.as_mut_ptr(), 20);
     }
-    frame.l4_flags     = (result.flow_hash >> 32) as u32;
-    frame.pps_delta    = result.pps_delta;
-    
+    frame.l4_flags = (result.flow_hash >> 32) as u32;
+    frame.pps_delta = result.pps_delta;
+
     // Assigning the captured cpu_id to the new ABI field[cite: 171].
     // Offset 44, size 4 bytes.
-    frame.cpu_id       = cpu_id;
+    frame.cpu_id = cpu_id;
 
-    // frame._pad: Offset 48, size 16 bytes. 
-    // Guaranteed STACK_ZERO from SignalFrame::zeroed(). 
+    // frame._pad: Offset 48, size 16 bytes.
+    // Guaranteed STACK_ZERO from SignalFrame::zeroed().
     // Explicitly not written to avoid dead store instruction bloat.
     // STEP 6 — Output to per-CPU ring buffer.
     //
@@ -189,7 +185,7 @@ fn pass_cold() -> u32 {
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     // Verifier trap: Any path leading here causes load-time rejection.
-    // We use a dedicated hint to tell LLVM this is unreachable, 
+    // We use a dedicated hint to tell LLVM this is unreachable,
     // further helping to prune panic-related branches.
     unsafe { core::hint::unreachable_unchecked() }
 }

@@ -17,6 +17,7 @@
 //! | Smart Backoff on Idle | Thread yields when the inbound RAM channel is empty |
 
 use arrayvec::ArrayVec;
+use crossbeam_channel::TryRecvError;
 use log::warn;
 use sg_common::SignalFrame;
 use std::sync::{
@@ -24,9 +25,8 @@ use std::sync::{
     Arc,
 };
 use tokio::task;
-use crossbeam_channel::TryRecvError;
 
-use crate::dispatch::{try_dispatch, DispatchSender, DispatchReceiver};
+use crate::dispatch::{try_dispatch, DispatchReceiver, DispatchSender};
 use crate::metrics::Metrics;
 
 /// Number of frames drained from the channel per processing iteration.
@@ -42,10 +42,10 @@ const TIMESTAMP_SLACK_NS: u64 = 0;
 ///
 /// Refactored to accept a `DispatchReceiver` instead of an Aya `RingBuf`.
 pub struct VacuumWorkerConfig {
-    pub cpu_id:   usize,
-    pub tx:       DispatchSender,   // Outbound pipeline / Telemetry
-    pub rx:       DispatchReceiver, // Inbound pipeline from Distributor
-    pub metrics:  Arc<Metrics>,
+    pub cpu_id: usize,
+    pub tx: DispatchSender,   // Outbound pipeline / Telemetry
+    pub rx: DispatchReceiver, // Inbound pipeline from Distributor
+    pub metrics: Arc<Metrics>,
     pub shutdown: Arc<AtomicBool>,
 }
 
@@ -58,7 +58,10 @@ pub fn spawn_vacuum_worker(config: VacuumWorkerConfig) -> task::JoinHandle<()> {
         let core_ids = core_affinity::get_core_ids().unwrap_or_default();
         if let Some(core) = core_ids.get(config.cpu_id) {
             if !core_affinity::set_for_current(*core) {
-                warn!("Failed to pin vacuum worker to CPU {}. Running with standard OS scheduler.", config.cpu_id);
+                warn!(
+                    "Failed to pin vacuum worker to CPU {}. Running with standard OS scheduler.",
+                    config.cpu_id
+                );
             }
         }
 
@@ -68,7 +71,13 @@ pub fn spawn_vacuum_worker(config: VacuumWorkerConfig) -> task::JoinHandle<()> {
 
 /// Synchronous vacuum entry point — called inside `spawn_blocking`.
 fn vacuum_entry(config: VacuumWorkerConfig) {
-    let VacuumWorkerConfig { cpu_id, tx, rx, metrics, shutdown } = config;
+    let VacuumWorkerConfig {
+        cpu_id,
+        tx,
+        rx,
+        metrics,
+        shutdown,
+    } = config;
 
     // -------------------------------------------------------------------------
     // CPU PINNING — Strict isolation requirement.
@@ -124,7 +133,9 @@ fn vacuum_entry(config: VacuumWorkerConfig) {
                 }
                 Err(TryRecvError::Disconnected) => {
                     // Upstream distributor has closed down. Terminate immediately.
-                    log::warn!("CPU {cpu_id}: Upstream distributor disconnected. Shuting down worker.");
+                    log::warn!(
+                        "CPU {cpu_id}: Upstream distributor disconnected. Shuting down worker."
+                    );
                     break;
                 }
             }

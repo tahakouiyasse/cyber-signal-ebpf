@@ -7,10 +7,10 @@
 //   the NoneError path even when the None arm only returns None. Explicit
 //   match { Some(x) => x, None => return None } produces a direct conditional
 //   branch with no trait dispatch and no panic symbol emission.
-use aya_ebpf::macros::map;
-use aya_ebpf::maps::PerCpuArray;
 use crate::maps;
 use crate::proto_view::ProtoView;
+use aya_ebpf::macros::map;
+use aya_ebpf::maps::PerCpuArray;
 
 /// Canonical PPS threshold. Matches CONTROLLER.md §10 exactly.
 /// Defined locally because this constant is eBPF-internal; it does not cross
@@ -76,7 +76,7 @@ pub fn select(view: &ProtoView) -> Option<FilterResult> {
         // None here means the map entry does not exist — impossible for index 0
         // in a pre-allocated PerCpuArray with max_entries=1, but the verifier
         // requires us to handle it. Treat as rate-limit exceeded (safe default).
-        None    => return None,
+        None => return None,
     };
 
     // SAFETY: get_ptr_mut(0) returned Some — the pointer is valid, non-null,
@@ -104,7 +104,10 @@ pub fn select(view: &ProtoView) -> Option<FilterResult> {
     //   the codegen might otherwise emit for the `as` cast.
     let pps_delta = val.min(u32::MAX as u64) as u32;
 
-    Some(FilterResult { flow_hash, pps_delta })
+    Some(FilterResult {
+        flow_hash,
+        pps_delta,
+    })
 }
 
 /// Murmur3-32 over a 13-byte 5-tuple (seed = 0), fully unrolled.
@@ -127,15 +130,9 @@ pub fn select(view: &ProtoView) -> Option<FilterResult> {
 ///   some codegen configurations. wrapping_mul is semantically explicit and
 ///   guarantees zero overflow-check emission regardless of codegen flags.
 #[inline(always)]
-fn murmur3_13(
-    src_ip:   u32,
-    dst_ip:   u32,
-    src_port: u16,
-    dst_port: u16,
-    proto:    u8,
-) -> u32 {
-    const C1:  u32 = 0xcc9e2d51;
-    const C2:  u32 = 0x1b873593;
+fn murmur3_13(src_ip: u32, dst_ip: u32, src_port: u16, dst_port: u16, proto: u8) -> u32 {
+    const C1: u32 = 0xcc9e2d51;
+    const C2: u32 = 0x1b873593;
     const LEN: u32 = 13;
 
     let mut h1: u32 = 0; // seed

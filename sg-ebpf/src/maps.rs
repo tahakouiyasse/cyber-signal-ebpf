@@ -69,6 +69,6 @@ pub fn deny_check(flow_hash: u64) -> bool {
     let idx = (flow_hash as u32) & 0xFFFF; // power-of-two mask: no division
     match DENY_MAP.get(idx) {
         Some(val) => *val != 0,
-        None      => false, // key absent = allow; treat as not denied
+        None => false, // key absent = allow; treat as not denied
     }
 }

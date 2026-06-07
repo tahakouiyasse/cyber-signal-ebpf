@@ -6,13 +6,13 @@
 //! 3. `Vacuum Workers` $\rightarrow$ [**Outbound Channel**] $\rightarrow$ `sg-arena` shards
 //!
 //! # Zero-Jitter Design
-//! Both channels utilize `crossbeam_channel::bounded` to guarantee zero heap allocation 
+//! Both channels utilize `crossbeam_channel::bounded` to guarantee zero heap allocation
 //! post-initialization and O(1) wait-free execution on the hot path via `try_send`.
 
-use crossbeam_channel::{bounded, Receiver, Sender, TrySendError};
-use sg_common::SignalFrame;
 use crate::metrics::Metrics;
 use crate::vacuum::BATCH_SIZE;
+use crossbeam_channel::{bounded, Receiver, Sender, TrySendError};
+use sg_common::SignalFrame;
 
 /// Capacity for the outbound channel toward sg-arena.
 /// Sized to absorb 4 full processing batches: 4 × 256 = 1024.
@@ -40,9 +40,9 @@ pub fn dispatch_channel() -> (DispatchSender, DispatchReceiver) {
 /// Lock-free, allocation-free, and guaranteed non-blocking.
 #[inline(always)]
 pub fn try_dispatch(
-    tx:      &DispatchSender,
-    frame:   SignalFrame,
-    cpu_id:  usize,
+    tx: &DispatchSender,
+    frame: SignalFrame,
+    cpu_id: usize,
     metrics: &Metrics,
 ) -> bool {
     match tx.try_send(frame) {

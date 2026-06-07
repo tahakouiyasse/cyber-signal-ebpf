@@ -27,12 +27,12 @@ const NCPU_MAX: usize = sg_common::NCPU;
 /// Allocated once during init (`Arc::new`); after that the heap profile is flat.
 pub struct Metrics {
     /// Frames successfully validated and dispatched, per CPU.
-    pub frames_ok:      [AtomicU64; NCPU_MAX],
+    pub frames_ok: [AtomicU64; NCPU_MAX],
     /// Frames that failed ABI validation (size or monotonicity), per CPU.
     pub frames_dropped: [AtomicU64; NCPU_MAX],
     /// Ring buffer entries that were available but skipped due to a full
     /// dispatch channel (backpressure events), per CPU.
-    pub channel_full:   [AtomicU64; NCPU_MAX],
+    pub channel_full: [AtomicU64; NCPU_MAX],
 }
 
 impl Metrics {
@@ -51,9 +51,9 @@ impl Metrics {
             }};
         }
         Self {
-            frames_ok:      zero_array!(NCPU_MAX),
+            frames_ok: zero_array!(NCPU_MAX),
             frames_dropped: zero_array!(NCPU_MAX),
-            channel_full:   zero_array!(NCPU_MAX),
+            channel_full: zero_array!(NCPU_MAX),
         }
     }
 
@@ -88,9 +88,21 @@ impl Metrics {
 
     /// Aggregate totals across all CPUs (reporting thread only).
     fn totals(&self) -> (u64, u64, u64) {
-        let ok    = self.frames_ok.iter().map(|c| c.load(Ordering::Relaxed)).sum();
-        let drop  = self.frames_dropped.iter().map(|c| c.load(Ordering::Relaxed)).sum();
-        let full  = self.channel_full.iter().map(|c| c.load(Ordering::Relaxed)).sum();
+        let ok = self
+            .frames_ok
+            .iter()
+            .map(|c| c.load(Ordering::Relaxed))
+            .sum();
+        let drop = self
+            .frames_dropped
+            .iter()
+            .map(|c| c.load(Ordering::Relaxed))
+            .sum();
+        let full = self
+            .channel_full
+            .iter()
+            .map(|c| c.load(Ordering::Relaxed))
+            .sum();
         (ok, drop, full)
     }
 
@@ -123,7 +135,7 @@ pub fn spawn_reporter(metrics: Arc<Metrics>, shutdown_rx: tokio::sync::watch::Re
         .name("sg-metrics".into())
         .spawn(move || {
             // Snapshot counters from the previous interval for delta calculation.
-            let mut prev_ok:   u64 = 0;
+            let mut prev_ok: u64 = 0;
             let mut prev_drop: u64 = 0;
 
             loop {
@@ -138,9 +150,9 @@ pub fn spawn_reporter(metrics: Arc<Metrics>, shutdown_rx: tokio::sync::watch::Re
                 }
 
                 let (ok, drop, full) = metrics.totals();
-                let delta_ok   = ok.saturating_sub(prev_ok);
+                let delta_ok = ok.saturating_sub(prev_ok);
                 let delta_drop = drop.saturating_sub(prev_drop);
-                let drop_bps   = Metrics::drop_rate_bps(delta_ok, delta_drop);
+                let drop_bps = Metrics::drop_rate_bps(delta_ok, delta_drop);
 
                 // Integer display: drop_bps / 100 = whole percent,
                 //                  drop_bps % 100 = fractional hundredths.
@@ -151,7 +163,7 @@ pub fn spawn_reporter(metrics: Arc<Metrics>, shutdown_rx: tokio::sync::watch::Re
                     drop_bps % 100,
                 );
 
-                prev_ok   = ok;
+                prev_ok = ok;
                 prev_drop = drop;
             }
 

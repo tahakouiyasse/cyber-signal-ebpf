@@ -27,12 +27,12 @@ use core::ptr;
 /// Size budget: 4+4+2+2+1+20 = 33 bytes; compiler may pad to 36.
 /// Well within the 128B ProtoView stack budget (INV-05).
 pub struct ProtoView {
-    pub src_ip:   u32,
-    pub dst_ip:   u32,
+    pub src_ip: u32,
+    pub dst_ip: u32,
     pub src_port: u16,
     pub dst_port: u16,
-    pub proto:    u8,
-    pub l3_hdr:   [u8; 20],
+    pub proto: u8,
+    pub l3_hdr: [u8; 20],
 }
 
 /// Extract the 5-tuple and IPv4 header from an XDP packet context.
@@ -50,7 +50,7 @@ pub struct ProtoView {
 pub fn inspect(ctx: &XdpContext) -> Option<ProtoView> {
     // Raw packet window. The verifier treats data..data_end as the only
     // accessible memory region. Every access must be proven within this range.
-    let data:     *const u8 = ctx.data()     as *const u8;
+    let data: *const u8 = ctx.data() as *const u8;
     let data_end: *const u8 = ctx.data_end() as *const u8;
 
     // STEP 1 — Minimum frame check: 14B Ethernet + 20B IPv4 = 34B.
@@ -75,9 +75,7 @@ pub fn inspect(ctx: &XdpContext) -> Option<ProtoView> {
     // STEP 2 — EtherType check: bytes [12..14], big-endian 0x0800 = IPv4.
     //
     // SAFETY: offset 12+2=14 ≤ 34, proven by step 1.
-    let ether_type = u16::from_be(unsafe {
-        ptr::read_unaligned(data.add(12) as *const u16)
-    });
+    let ether_type = u16::from_be(unsafe { ptr::read_unaligned(data.add(12) as *const u16) });
     if ether_type != 0x0800 {
         let mut res = None;
         cold_none(&mut res);
@@ -121,18 +119,10 @@ pub fn inspect(ctx: &XdpContext) -> Option<ProtoView> {
     //   dst_port: [36..38)  (Eth 14 + IP 20 + L4 dst 2)
     //
     // SAFETY: all offsets + sizeof(T) ≤ 54, proven by step 4 bounds check.
-    let src_ip = u32::from_be(unsafe {
-        ptr::read_unaligned(data.add(26) as *const u32)
-    });
-    let dst_ip = u32::from_be(unsafe {
-        ptr::read_unaligned(data.add(30) as *const u32)
-    });
-    let src_port = u16::from_be(unsafe {
-        ptr::read_unaligned(data.add(34) as *const u16)
-    });
-    let dst_port = u16::from_be(unsafe {
-        ptr::read_unaligned(data.add(36) as *const u16)
-    });
+    let src_ip = u32::from_be(unsafe { ptr::read_unaligned(data.add(26) as *const u32) });
+    let dst_ip = u32::from_be(unsafe { ptr::read_unaligned(data.add(30) as *const u32) });
+    let src_port = u16::from_be(unsafe { ptr::read_unaligned(data.add(34) as *const u16) });
+    let dst_port = u16::from_be(unsafe { ptr::read_unaligned(data.add(36) as *const u16) });
 
     // STEP 6 — IPv4 header copy: bytes [14..34), 20 bytes.
     //
@@ -146,15 +136,39 @@ pub fn inspect(ctx: &XdpContext) -> Option<ProtoView> {
     //   access individually against the step-1 bound.
     //
     // SAFETY: offsets [14..33] are all < 34, proven by step 1 bounds check.
-    let l3_hdr: [u8; 20] = unsafe {[
-        *data.add(14), *data.add(15), *data.add(16), *data.add(17),
-        *data.add(18), *data.add(19), *data.add(20), *data.add(21),
-        *data.add(22), *data.add(23), *data.add(24), *data.add(25),
-        *data.add(26), *data.add(27), *data.add(28), *data.add(29),
-        *data.add(30), *data.add(31), *data.add(32), *data.add(33),
-    ]};
+    let l3_hdr: [u8; 20] = unsafe {
+        [
+            *data.add(14),
+            *data.add(15),
+            *data.add(16),
+            *data.add(17),
+            *data.add(18),
+            *data.add(19),
+            *data.add(20),
+            *data.add(21),
+            *data.add(22),
+            *data.add(23),
+            *data.add(24),
+            *data.add(25),
+            *data.add(26),
+            *data.add(27),
+            *data.add(28),
+            *data.add(29),
+            *data.add(30),
+            *data.add(31),
+            *data.add(32),
+            *data.add(33),
+        ]
+    };
 
-    Some(ProtoView { src_ip, dst_ip, src_port, dst_port, proto, l3_hdr })
+    Some(ProtoView {
+        src_ip,
+        dst_ip,
+        src_port,
+        dst_port,
+        proto,
+        l3_hdr,
+    })
 }
 
 /// Outlined cold-path None return shared by all early-exit arms.

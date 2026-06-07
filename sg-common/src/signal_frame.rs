@@ -33,7 +33,7 @@ pub struct SignalFrame {
     /// Packets-per-second delta since last SignalFrame for this flow.
     /// Saturates at u32::MAX; overflow is reported via SignalError::PpsOverflow.
     pub pps_delta: u32,
-    
+
     pub cpu_id: u32,
     /// Explicit padding to reach 64 bytes. Always zero. Never repurposed
     /// without a spec delta approved by Agent 0 (CONTROLLER.md §9).
@@ -70,8 +70,8 @@ impl SignalFrame {
             l3_hdr: [0u8; 20],
             l4_flags: 0,
             pps_delta: 0,
-            cpu_id: 0,        // ADDED: For Phase 2.3 Per-CPU routing
-            _pad: [0u8; 16],  // UPDATED: Shrunk from 20 to 16 to maintain 64B size
+            cpu_id: 0,       // ADDED: For Phase 2.3 Per-CPU routing
+            _pad: [0u8; 16], // UPDATED: Shrunk from 20 to 16 to maintain 64B size
         }
     }
 }

@@ -26,12 +26,12 @@
 use std::path::Path;
 
 use anyhow::{anyhow, Context, Result};
+use aya::maps::MapData;
 use aya::{
     maps::RingBuf,
     programs::{Xdp, XdpFlags},
     Ebpf,
 };
-use aya::maps::MapData;
 use log::{info, warn};
 
 /// Path to the compiled eBPF ELF object produced by `sg-ebpf`.
@@ -43,10 +43,9 @@ const EBPF_OBJECT_PATH: &str = "target/bpfel-unknown-none/release/sg-ebpf";
 /// Name of the XDP program entry point as declared in `sg-ebpf/src/main.rs`.
 const XDP_PROGRAM_NAME: &str = "xdp_ingress";
 
-
 /// Opaque handle returned by [`load_and_attach`].
 ///
-/// Holds the live [`Ebpf`] instance and the link identity required for 
+/// Holds the live [`Ebpf`] instance and the link identity required for
 /// a clean detach during shutdown.
 pub struct LoadedProbe {
     /// The Aya eBPF context — keeping this alive preserves map FDs.
@@ -78,20 +77,22 @@ pub struct LoadedProbe {
 /// Load the `sg-ebpf` object, attach XDP, and return owned ring buffer handles.
 ///
 /// Returns `(LoadedProbe, Vec<Option<RingBuf<MapData>>>)` indexed by CPU id[cite: 86, 114].
-pub fn load_and_attach(
-    iface: &str,
-) -> Result<(LoadedProbe, Vec<Option<RingBuf<MapData>>>)> {
+pub fn load_and_attach(iface: &str) -> Result<(LoadedProbe, Vec<Option<RingBuf<MapData>>>)> {
     // --- 1. Load ELF object ---
     let obj_path = Path::new(EBPF_OBJECT_PATH);
     if !obj_path.exists() {
         anyhow::bail!("eBPF object not found at `{}` [cite: 94]", EBPF_OBJECT_PATH);
     }
 
-    let obj_bytes = std::fs::read(obj_path)
-        .with_context(|| format!("failed to read eBPF object `{}` [cite: 95]", EBPF_OBJECT_PATH))?;
+    let obj_bytes = std::fs::read(obj_path).with_context(|| {
+        format!(
+            "failed to read eBPF object `{}` [cite: 95]",
+            EBPF_OBJECT_PATH
+        )
+    })?;
 
-    let mut ebpf = Ebpf::load(&obj_bytes)
-        .with_context(|| "Aya failed to parse eBPF ELF [cite: 96]")?;
+    let mut ebpf =
+        Ebpf::load(&obj_bytes).with_context(|| "Aya failed to parse eBPF ELF [cite: 96]")?;
 
     // Initialise kernel-side logging (aya-log) [cite: 97]
     if let Err(e) = aya_log::EbpfLogger::init(&mut ebpf) {
@@ -103,9 +104,16 @@ pub fn load_and_attach(
         .program_mut(XDP_PROGRAM_NAME)
         .with_context(|| format!("program `{}` not found [cite: 100]", XDP_PROGRAM_NAME))?
         .try_into()
-        .with_context(|| format!("program `{}` is not an XDP program [cite: 101]", XDP_PROGRAM_NAME))?;
+        .with_context(|| {
+            format!(
+                "program `{}` is not an XDP program [cite: 101]",
+                XDP_PROGRAM_NAME
+            )
+        })?;
 
-    program.load().with_context(|| "eBPF verifier rejected the program [cite: 102]")?;
+    program
+        .load()
+        .with_context(|| "eBPF verifier rejected the program [cite: 102]")?;
 
     // Capture the XdpLinkId to avoid E0061 (missing argument) during detach [cite: 103, 141]
     let link_id = match program.attach(iface, XdpFlags::DRV_MODE) {
@@ -114,9 +122,13 @@ pub fn load_and_attach(
             id
         }
         Err(drv_err) => {
-            warn!("DRV_MODE failed on `{}` ({}); falling back to SKB_MODE [cite: 104]", iface, drv_err);
-            program.attach(iface, XdpFlags::SKB_MODE)
-                .with_context(|| format!("SKB_MODE attach also failed on `{}` [cite: 105]", iface))?
+            warn!(
+                "DRV_MODE failed on `{}` ({}); falling back to SKB_MODE [cite: 104]",
+                iface, drv_err
+            );
+            program.attach(iface, XdpFlags::SKB_MODE).with_context(|| {
+                format!("SKB_MODE attach also failed on `{}` [cite: 105]", iface)
+            })?
         }
     };
 
@@ -141,13 +153,10 @@ pub fn load_and_attach(
 /// All 32 workers are initialized, but only the first one will be 'Active'
 /// to prevent multiple threads from competing for the same RingBuf FDs
 /// without a complex multiplexing layer.
-fn build_ring_handles(
-    ebpf: &mut Ebpf,
-    iface: &str,
-) -> Result<Vec<Option<RingBuf<MapData>>>> {
-    const NCPU: usize = 32; 
+fn build_ring_handles(ebpf: &mut Ebpf, iface: &str) -> Result<Vec<Option<RingBuf<MapData>>>> {
+    const NCPU: usize = 32;
     let mut handles = Vec::with_capacity(NCPU);
-    
+
     // Initialize the vector with None
     for _ in 0..NCPU {
         handles.push(None);
@@ -159,7 +168,7 @@ fn build_ring_handles(
         Some(map_owned) => {
             let ring = RingBuf::try_from(map_owned)
                 .with_context(|| "SIGNAL_RING exists but is not a RingBuf type")?;
-            
+
             // Assign the owned global ring buffer to the first worker slot.
             handles[0] = Some(ring);
             info!("Global SIGNAL_RING (owned) linked to Worker 0");
@@ -173,9 +182,7 @@ fn build_ring_handles(
     }
 
     let populated = handles.iter().filter(|h| h.is_some()).count();
-    info!(
-        "Ring handle list built: {populated}/{NCPU} workers active on `{iface}`"
-    );
+    info!("Ring handle list built: {populated}/{NCPU} workers active on `{iface}`");
 
     Ok(handles)
 }
@@ -187,7 +194,11 @@ fn build_ring_handles(
 /// the `LoadedProbe` by value.
 pub fn detach(probe: LoadedProbe) -> Result<()> {
     // Destructure the probe to access the eBPF instance and the specific link_id
-    let LoadedProbe { mut ebpf, iface, link_id } = probe;
+    let LoadedProbe {
+        mut ebpf,
+        iface,
+        link_id,
+    } = probe;
 
     let program: &mut Xdp = ebpf
         .program_mut(XDP_PROGRAM_NAME)
@@ -202,16 +213,17 @@ pub fn detach(probe: LoadedProbe) -> Result<()> {
 
     // Aya 0.13 requires the specific XdpLinkId to detach a program explicitly.
     // This ensures we remove exactly the hook we attached earlier.
-    program
-        .detach(link_id)
-        .with_context(|| {
-            format!(
-                "XDP detach from `{}` failed; interface may need manual cleanup \
+    program.detach(link_id).with_context(|| {
+        format!(
+            "XDP detach from `{}` failed; interface may need manual cleanup \
                  via `ip link set {} xdp off`",
-                iface, iface
-            )
-        })?;
+            iface, iface
+        )
+    })?;
 
-    info!("XDP hook cleanly detached from `{}`; interface restored", iface);
+    info!(
+        "XDP hook cleanly detached from `{}`; interface restored",
+        iface
+    );
     Ok(())
 }

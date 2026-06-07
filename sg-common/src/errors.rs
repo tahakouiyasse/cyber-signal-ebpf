@@ -60,9 +60,15 @@ const_assert_eq!(SignalError::PpsOverflow as u32, 3);
 impl core::fmt::Display for SignalError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Self::Truncated => f.write_str("SignalError::Truncated(ring buffer overrun; frames dropped)"),
-            Self::HashCollision => f.write_str("SignalError::HashCollision(5-tuple hash bucket collision; frame discarded)"),
-            Self::PpsOverflow => f.write_str("SignalError::PpsOverflow(pps_delta saturated u32::MAX)"),
+            Self::Truncated => {
+                f.write_str("SignalError::Truncated(ring buffer overrun; frames dropped)")
+            }
+            Self::HashCollision => f.write_str(
+                "SignalError::HashCollision(5-tuple hash bucket collision; frame discarded)",
+            ),
+            Self::PpsOverflow => {
+                f.write_str("SignalError::PpsOverflow(pps_delta saturated u32::MAX)")
+            }
         }
     }
 }
