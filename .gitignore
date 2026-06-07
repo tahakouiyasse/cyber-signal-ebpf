@@ -1,5 +1,10 @@
 # vmlinux.rs is generated at build time by sg-ebpf/build.rs via aya-tool.
 # It is kernel-specific. Committing it would break CO-RE on different kernels.
-sg-ebpf/target/
-target/target/
+vmlinux.rs
+
+# Block all Cargo build directories anywhere in the workspace
+**/target/
 target-user/
+
+# Block LibreOffice temporary lockfiles
+.~lock.*#
