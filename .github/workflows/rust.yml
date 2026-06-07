@@ -39,10 +39,7 @@ jobs:
         components: rust-src, rustfmt, clippy, llvm-tools-preview
 
     # -------------------------------------------------------------------------
-    # bpf-linker installation
-    # --strategy (singular) was renamed to --strategies (plural) in cargo-binstall
-    # >= 1.6.0. We pin cargo-binstall to a known-stable release to avoid this
-    # class of flag-rename breakage in future runs, then use --strategies.
+    # Installation robuste de bpf-linker via cargo-binstall épinglé
     # -------------------------------------------------------------------------
     - name: Install bpf-linker
       run: |
@@ -52,24 +49,19 @@ jobs:
           | tar -xz -C ~/.cargo/bin
 
         echo "=== Validating cargo-binstall ==="
-        # cargo-binstall intercepts --version as a crate-version argument (requires a value).
-        # -V is the correct flag for printing the tool's own version string.
         cargo-binstall -V
 
         echo "=== Installing bpf-linker via cargo-binstall ==="
-        # --strategies (plural) is the correct flag name as of cargo-binstall >= 1.6.0.
-        # quick-install pulls a pre-built binary; falls back to compile if unavailable.
         cargo-binstall --strategies quick-install --no-confirm bpf-linker
 
         echo "=== Validating bpf-linker ==="
-        # bpf-linker follows standard clap convention: --version prints self-version.
         bpf-linker --version
 
     - name: Cache Cargo Dependencies
       uses: actions/cache@v4
       with:
         path: |
-          ~/.cargo/registry
+          ~
           ~/.cargo/git
           target
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml', 'rust-toolchain.toml') }}
@@ -80,8 +72,6 @@ jobs:
     # PHASE 1: ABI FREEZE — sg-common (CONTROLLER.md §6)
     # =========================================================================
     - name: Phase 1.1 - Verify sg-common Core (Kernel Target)
-      # -Z build-std=core compiles the core crate on-the-fly for bpfel-unknown-none.
-      # This is required because no pre-compiled core exists for this target.
       run: cargo check -Z build-std=core --target bpfel-unknown-none -p sg-common
 
     - name: Phase 1.2 - Verify sg-common Userspace Bindings
@@ -91,12 +81,14 @@ jobs:
     # PHASE 2: KERNEL VERIFIER PASS — sg-ebpf (CONTROLLER.md §6)
     # =========================================================================
     - name: Phase 2.1 - Compile Kernel eBPF Bytecode
-      run: cargo build -Z build-std=core --target bpfel-unknown-none -p sg-ebpf
+      # Utilisation des variables de contrôle pour aligner la compilation de la lib core
+      run: |
+        CARGO_PROFILE_RELEASE_LTO=false \
+        RUSTFLAGS="-C embed-bitcode=yes -C lto=no" \
+        cargo build -Z build-std=core --target bpfel-unknown-none -p sg-ebpf
 
     - name: Phase 2.2 - Audit Stack Frame Size (INV-05 Compliance)
       run: |
-        # llvm-tools-preview installs llvm-objdump under the rustlib sysroot.
-        # We locate the versioned binary explicitly to avoid relying on $PATH.
         SYSROOT=$(rustc --print sysroot)
         LLVM_OBJDUMP=$(find "$SYSROOT/lib/rustlib/x86_64-unknown-linux-gnu/bin/" \
                             -name "llvm-objdump" -type f 2>/dev/null | head -n 1)
@@ -107,8 +99,10 @@ jobs:
         fi
 
         echo "=== Using: $LLVM_OBJDUMP ==="
-
         echo "=== Building release eBPF object for audit ==="
+        
+        CARGO_PROFILE_RELEASE_LTO=false \
+        RUSTFLAGS="-C embed-bitcode=yes -C lto=no" \
         cargo build --release -Z build-std=core --target bpfel-unknown-none -p sg-ebpf
 
         TARGET_BIN=$(find target/bpfel-unknown-none/release/ \
@@ -129,7 +123,8 @@ jobs:
       run: cargo check --target x86_64-unknown-linux-gnu -p sg-capture
 
     - name: Phase 3.2 - Run Test Suite (Post-Init Assertions)
-      run: cargo test --workspace --target x86_64-unknown-linux-gnu -- --nocapture
+      # --exclude sg-ebpf empêche l'injection conflictuelle de std::panic sur la crate kernel no_std
+      run: cargo test --workspace --exclude sg-ebpf --target x86_64-unknown-linux-gnu -- --nocapture
 
     # =========================================================================
     # CODE QUALITY & INVARIANTS POLICING
@@ -138,4 +133,8 @@ jobs:
       run: cargo fmt --all -- --check
 
     - name: Enforce Zero-Tolerance Linting (clippy)
-      run: cargo clippy --workspace --all-targets -- -D warnings
+      # Utilisation des mêmes variables environnementales pour éviter les conflits de types lors de l'analyse clippy du workspace
+      run: |
+        CARGO_PROFILE_RELEASE_LTO=false \
+        RUSTFLAGS="-C embed-bitcode=yes -C lto=no" \
+        cargo clippy --workspace --all-targets -- -D warnings
