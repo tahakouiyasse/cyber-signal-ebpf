@@ -6,6 +6,8 @@ edition = "2021"
 [[bin]]
 name = "sg-ebpf"
 path = "src/main.rs"
+test = false
+bench = false
 
 [dependencies]
 aya-ebpf     = { workspace = true }
