@@ -31,13 +31,23 @@ jobs:
         components: rust-src, rustfmt, clippy, llvm-tools-preview
 
    
+    
     - name: Install bpf-linker
       run: |
-        # Téléchargement de la dernière version stable du binaire bpf-linker
-        wget https://github.com/aya-rs/bpf-linker/releases/latest/download/bpf-linker-x86_64-unknown-linux-gnu.tar.gz
-        tar -xzf bpf-linker-x86_64-unknown-linux-gnu.tar.gz
+        # Extraction de l'URL exacte de l'asset via l'API GitHub Releases
+        DOWNLOAD_URL=$(curl -s https://api.github.com/repos/aya-rs/bpf-linker/releases/latest | jq -r '.assets[] | select(.name | contains("x86_64-unknown-linux-gnu.tar.gz")) | .browser_download_url')
+        echo "Downloading bpf-linker from: $DOWNLOAD_URL"
+        
+        # Téléchargement et extraction
+        wget -O bpf-linker.tar.gz "$DOWNLOAD_URL"
+        tar -xzf bpf-linker.tar.gz
+        
+        # Déplacement du binaire extrait dans le PATH
         sudo mv bpf-linker /usr/local/bin/
         chmod +x /usr/local/bin/bpf-linker
+        
+        # Vérification opérationnelle
+        bpf-linker --version
 
     - name: Cache Cargo Dependencies
       uses: actions/cache@v4
