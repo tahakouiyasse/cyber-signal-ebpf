@@ -33,17 +33,17 @@ jobs:
    
     
     # Installation robuste via le script officiel d'Aya
+    # Installation infaillible via cargo-binstall (standard industriel pour la CI)
     - name: Install bpf-linker
       run: |
-        echo "=== Downloading bpf-linker v0.10.3 ==="
-        wget https://github.com/aya-rs/bpf-linker/releases/download/v0.10.3/bpf-linker-v0.10.3-x86_64-unknown-linux-gnu.tar.gz
+        echo "=== Installing cargo-binstall ==="
+        curl -L https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-gnu.tgz | tar -xz -C ~/.cargo/bin
         
-        echo "=== Extracting bpf-linker ==="
-        tar -xzf bpf-linker-v0.10.3-x86_64-unknown-linux-gnu.tar.gz
+        echo "=== Binstalling bpf-linker ==="
+        # cargo-binstall va chercher, télécharger et installer le binaire eBPF exact
+        cargo binstall --strategy quick-install --no-confirm bpf-linker
         
-        echo "=== Deploying to /usr/local/bin ==="
-        sudo mv bpf-linker /usr/local/bin/
-        chmod +x /usr/local/bin/bpf-linker
+        # Validation opérationnelle
         bpf-linker --version
 
     - name: Cache Cargo Dependencies
