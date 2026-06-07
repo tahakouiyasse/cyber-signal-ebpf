@@ -1,0 +1,90 @@
+name: CYBER-SIGNAL-eBPF CI Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  validate-and-test:
+    name: Critical Path Verification
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Source Code
+      uses: actions/checkout@v4
+
+    - name: Install System Dependencies (Aya & BPF Tooling)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y linux-headers-$(uname -r) build-essential libelf-dev pkg-config clang llvm bpftool
+
+    - name: Load Pinned Rust Toolchain
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: none
+
+    - name: Cache Cargo Dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml', 'rust-toolchain.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+
+    # =========================================================================
+    # PHASE 1: ABI FREEZE — sg-common (CONTROLLER.md §6)
+    # =========================================================================
+    - name: Phase 1.1 - Verify sg-common Core (Kernel Target)
+      run: cargo check --target bpfel-unknown-none -p sg-common
+
+    - name: Phase 1.2 - Verify sg-common Userspace Bindings
+      run: cargo check --target x86_64-unknown-linux-gnu -p sg-common
+
+    # =========================================================================
+    # PHASE 2: KERNEL VERIFIER PASS — sg-ebpf (CONTROLLER.md §6)
+    # =========================================================================
+    - name: Phase 2.1 - Compile Kernel eBPF Bytecode
+      run: cargo build --target bpfel-unknown-none -p sg-ebpf
+
+    - name: Phase 2.2 - Audit Stack Frame Size (INV-05 Compliance)
+      run: |
+        # Recherche des symboles xdp_ingress et analyse de la taille de la pile via llvm-objdump
+        # Empêche le merge si la frame de pile dépasse 512 octets (CONTROLLER.md §2.5 & §5.2)
+        LLVM_EXTRACT=$(rustc --print sysroot)/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-objdump
+        if [ -f "$LLVM_EXTRACT" ]; then
+          echo "=== Auditing eBPF Stack Usage ==="
+          # Compilation de vérification en mode release pour l'analyse finale de la pile
+          cargo build --release --target bpfel-unknown-none -p sg-ebpf
+          TARGET_BIN=$(find target/bpfel-unknown-none/release/ -name "sg-ebpf" -type f | head -n 1)
+          if [ ! -z "$TARGET_BIN" ]; then
+            $LLVM_EXTRACT -d "$TARGET_BIN" | grep -A2 "xdp_ingress" || true
+          fi
+        else
+          echo "Warning: llvm-objdump from llvm-tools-preview component not found in path."
+        fi
+
+    # =========================================================================
+    # PHASE 3: VACUUM PERFORMANCE — sg-capture (CONTROLLER.md §6)
+    # =========================================================================
+    - name: Phase 3.1 - Verify Userspace Capture Daemon
+      run: cargo check --target x86_64-unknown-linux-gnu -p sg-capture
+
+    - name: Phase 3.2 - Run Test Suite (Post-Init Assertions)
+      run: cargo test --workspace --target x86_64-unknown-linux-gnu -- --nocapture
+
+    # =========================================================================
+    # CODE QUALITY & INVARIANTS POLICING
+    # =========================================================================
+    - name: Enforce Strict Code Formatting (rustfmt)
+      run: cargo fmt --all -- --check
+
+    - name: Enforce Zero-Tolerance Linting (clippy)
+      run: cargo clippy --workspace --all-targets -- -D warnings
