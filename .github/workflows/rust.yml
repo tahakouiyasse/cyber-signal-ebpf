@@ -52,7 +52,9 @@ jobs:
           | tar -xz -C ~/.cargo/bin
 
         echo "=== Validating cargo-binstall ==="
-        cargo-binstall --version
+        # cargo-binstall intercepts --version as a crate-version argument (requires a value).
+        # -V is the correct flag for printing the tool's own version string.
+        cargo-binstall -V
 
         echo "=== Installing bpf-linker via cargo-binstall ==="
         # --strategies (plural) is the correct flag name as of cargo-binstall >= 1.6.0.
@@ -60,6 +62,7 @@ jobs:
         cargo-binstall --strategies quick-install --no-confirm bpf-linker
 
         echo "=== Validating bpf-linker ==="
+        # bpf-linker follows standard clap convention: --version prints self-version.
         bpf-linker --version
 
     - name: Cache Cargo Dependencies
