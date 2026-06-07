@@ -21,7 +21,15 @@ jobs:
     - name: Install System Dependencies (Aya & BPF Tooling)
       run: |
         sudo apt-get update
-        sudo apt-get install -y linux-headers-$(uname -r) build-essential libelf-dev pkg-config clang llvm linux-tools-common linux-tools-generic
+        sudo apt-get install -y \
+          linux-headers-$(uname -r) \
+          build-essential \
+          libelf-dev \
+          pkg-config \
+          clang \
+          llvm \
+          linux-tools-common \
+          linux-tools-generic
 
     - name: Load Pinned Rust Toolchain
       uses: dtolnay/rust-toolchain@master
@@ -30,20 +38,28 @@ jobs:
         targets: x86_64-unknown-linux-gnu
         components: rust-src, rustfmt, clippy, llvm-tools-preview
 
-   
-    
-    # Installation robuste via le script officiel d'Aya
-    # Installation infaillible via cargo-binstall (standard industriel pour la CI)
+    # -------------------------------------------------------------------------
+    # bpf-linker installation
+    # --strategy (singular) was renamed to --strategies (plural) in cargo-binstall
+    # >= 1.6.0. We pin cargo-binstall to a known-stable release to avoid this
+    # class of flag-rename breakage in future runs, then use --strategies.
+    # -------------------------------------------------------------------------
     - name: Install bpf-linker
       run: |
-        echo "=== Installing cargo-binstall ==="
-        curl -L https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-gnu.tgz | tar -xz -C ~/.cargo/bin
-        
-        echo "=== Binstalling bpf-linker ==="
-        # cargo-binstall va chercher, télécharger et installer le binaire eBPF exact
-        cargo binstall --strategy quick-install --no-confirm bpf-linker
-        
-        # Validation opérationnelle
+        echo "=== Installing cargo-binstall (pinned release) ==="
+        curl -sSfL \
+          https://github.com/cargo-bins/cargo-binstall/releases/download/v1.6.9/cargo-binstall-x86_64-unknown-linux-gnu.tgz \
+          | tar -xz -C ~/.cargo/bin
+
+        echo "=== Validating cargo-binstall ==="
+        cargo-binstall --version
+
+        echo "=== Installing bpf-linker via cargo-binstall ==="
+        # --strategies (plural) is the correct flag name as of cargo-binstall >= 1.6.0.
+        # quick-install pulls a pre-built binary; falls back to compile if unavailable.
+        cargo-binstall --strategies quick-install --no-confirm bpf-linker
+
+        echo "=== Validating bpf-linker ==="
         bpf-linker --version
 
     - name: Cache Cargo Dependencies
@@ -61,7 +77,8 @@ jobs:
     # PHASE 1: ABI FREEZE — sg-common (CONTROLLER.md §6)
     # =========================================================================
     - name: Phase 1.1 - Verify sg-common Core (Kernel Target)
-      # Ajout de -Z build-std=core pour compiler la crate core à la volée
+      # -Z build-std=core compiles the core crate on-the-fly for bpfel-unknown-none.
+      # This is required because no pre-compiled core exists for this target.
       run: cargo check -Z build-std=core --target bpfel-unknown-none -p sg-common
 
     - name: Phase 1.2 - Verify sg-common Userspace Bindings
@@ -75,18 +92,32 @@ jobs:
 
     - name: Phase 2.2 - Audit Stack Frame Size (INV-05 Compliance)
       run: |
-        LLVM_EXTRACT=$(rustc --print sysroot)/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-objdump
-        if [ -f "$LLVM_EXTRACT" ]; then
-          echo "=== Auditing eBPF Stack Usage ==="
-          # Ajout également ici pour la compilation en mode release pour l'audit
-          cargo build --release -Z build-std=core --target bpfel-unknown-none -p sg-ebpf
-          TARGET_BIN=$(find target/bpfel-unknown-none/release/ -name "sg-ebpf" -type f | head -n 1)
-          if [ ! -z "$TARGET_BIN" ]; then
-            $LLVM_EXTRACT -d "$TARGET_BIN" | grep -A2 "xdp_ingress" || true
-          fi
-        else
-          echo "Warning: llvm-objdump from llvm-tools-preview component not found in path."
+        # llvm-tools-preview installs llvm-objdump under the rustlib sysroot.
+        # We locate the versioned binary explicitly to avoid relying on $PATH.
+        SYSROOT=$(rustc --print sysroot)
+        LLVM_OBJDUMP=$(find "$SYSROOT/lib/rustlib/x86_64-unknown-linux-gnu/bin/" \
+                            -name "llvm-objdump" -type f 2>/dev/null | head -n 1)
+
+        if [ -z "$LLVM_OBJDUMP" ]; then
+          echo "ERROR: llvm-objdump not found in rustlib sysroot. Check llvm-tools-preview component."
+          exit 1
         fi
+
+        echo "=== Using: $LLVM_OBJDUMP ==="
+
+        echo "=== Building release eBPF object for audit ==="
+        cargo build --release -Z build-std=core --target bpfel-unknown-none -p sg-ebpf
+
+        TARGET_BIN=$(find target/bpfel-unknown-none/release/ \
+                          -name "sg-ebpf" -type f 2>/dev/null | head -n 1)
+
+        if [ -z "$TARGET_BIN" ]; then
+          echo "ERROR: eBPF binary not found under target/bpfel-unknown-none/release/"
+          exit 1
+        fi
+
+        echo "=== Auditing eBPF Stack Frame — xdp_ingress (INV-05: must be ≤ 512B) ==="
+        "$LLVM_OBJDUMP" -d "$TARGET_BIN" | grep -A2 "xdp_ingress" || true
 
     # =========================================================================
     # PHASE 3: VACUUM PERFORMANCE — sg-capture (CONTROLLER.md §6)
