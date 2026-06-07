@@ -26,7 +26,9 @@ jobs:
     - name: Load Pinned Rust Toolchain
       uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: none
+        toolchain: nightly-2026-05-10
+        targets: bpfel-unknown-none, x86_64-unknown-linux-gnu
+        components: rust-src, rustfmt, clippy, llvm-tools-preview
 
     - name: Cache Cargo Dependencies
       uses: actions/cache@v4
@@ -56,12 +58,9 @@ jobs:
 
     - name: Phase 2.2 - Audit Stack Frame Size (INV-05 Compliance)
       run: |
-        # Recherche des symboles xdp_ingress et analyse de la taille de la pile via llvm-objdump
-        # Empêche le merge si la frame de pile dépasse 512 octets (CONTROLLER.md §2.5 & §5.2)
         LLVM_EXTRACT=$(rustc --print sysroot)/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-objdump
         if [ -f "$LLVM_EXTRACT" ]; then
           echo "=== Auditing eBPF Stack Usage ==="
-          # Compilation de vérification en mode release pour l'analyse finale de la pile
           cargo build --release --target bpfel-unknown-none -p sg-ebpf
           TARGET_BIN=$(find target/bpfel-unknown-none/release/ -name "sg-ebpf" -type f | head -n 1)
           if [ ! -z "$TARGET_BIN" ]; then
