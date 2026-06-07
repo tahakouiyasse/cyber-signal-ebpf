@@ -21,7 +21,7 @@ jobs:
     - name: Install System Dependencies (Aya & BPF Tooling)
       run: |
         sudo apt-get update
-        sudo apt-get install -y linux-headers-$(uname -r) build-essential libelf-dev pkg-config clang llvm bpftool
+        sudo apt-get install -y linux-headers-$(uname -r) build-essential libelf-dev pkg-config clang llvm linux-tools-common linux-tools-generic
 
     - name: Load Pinned Rust Toolchain
       uses: dtolnay/rust-toolchain@master
