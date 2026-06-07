@@ -30,6 +30,15 @@ jobs:
         targets: x86_64-unknown-linux-gnu
         components: rust-src, rustfmt, clippy, llvm-tools-preview
 
+   
+    - name: Install bpf-linker
+      run: |
+        # Téléchargement de la dernière version stable du binaire bpf-linker
+        wget https://github.com/aya-rs/bpf-linker/releases/latest/download/bpf-linker-x86_64-unknown-linux-gnu.tar.gz
+        tar -xzf bpf-linker-x86_64-unknown-linux-gnu.tar.gz
+        sudo mv bpf-linker /usr/local/bin/
+        chmod +x /usr/local/bin/bpf-linker
+
     - name: Cache Cargo Dependencies
       uses: actions/cache@v4
       with:
