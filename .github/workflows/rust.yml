@@ -35,11 +35,15 @@ jobs:
     # Installation robuste via le script officiel d'Aya
     - name: Install bpf-linker
       run: |
-        echo "=== Installing bpf-linker ==="
-        # Utilisation du script d'installation rapide officiel d'Aya
-        curl -L https://aya-rs.dev/bpf-linker-installer.sh | sh -s -- --to /usr/local/bin
+        echo "=== Downloading bpf-linker v0.10.3 ==="
+        wget https://github.com/aya-rs/bpf-linker/releases/download/v0.10.3/bpf-linker-v0.10.3-x86_64-unknown-linux-gnu.tar.gz
         
-        # Vérification opérationnelle
+        echo "=== Extracting bpf-linker ==="
+        tar -xzf bpf-linker-v0.10.3-x86_64-unknown-linux-gnu.tar.gz
+        
+        echo "=== Deploying to /usr/local/bin ==="
+        sudo mv bpf-linker /usr/local/bin/
+        chmod +x /usr/local/bin/bpf-linker
         bpf-linker --version
 
     - name: Cache Cargo Dependencies
