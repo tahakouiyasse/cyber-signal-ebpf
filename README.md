@@ -511,6 +511,10 @@ A `SignalFrame` straddling a cache-line boundary doubles the number of cache lin
 **ADR-003: Why panic on CPU affinity failure**  
 A vacuum worker executing on the wrong CPU reads from a remote ring buffer. On a dual-socket NUMA system, this adds ~60–80 ns of memory latency per record — enough to violate the < 1 µs P99 jitter budget under any realistic load. Silent degradation is worse than a hard crash: the crash is observable; the NUMA miss is not, until production measurements regress.
 
+## Contact
+
+For architectural inquiries, research collaboration, or professional opportunities, reach out at [tahakouiyasse@protonmail.com].
+
 ---
 
 *CONTROLLER.md v1.0.0 — FROZEN — This README reflects the architecture exactly as specified.*  
